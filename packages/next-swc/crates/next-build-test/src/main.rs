@@ -140,7 +140,10 @@ async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
     }
     println!("HMR {:?}", start.elapsed());
 
-    println!("Done");
+    println!(
+        "Done ({}GB)",
+        (TurboMalloc::memory_usage() / 1024 / 1024) as f32 / 1024.0
+    );
 
     loop {
         sleep(Duration::from_secs(1000));
