@@ -53,13 +53,13 @@ async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
     let project = tt
         .run_once(async { Ok(ProjectContainer::new(options)) })
         .await?;
-    println!("ProjectContainer::new {:?}", start.elapsed());
+    println!("ProjectContainer::new {:?} ({} GB)", start.elapsed(), mem());
 
     let start = Instant::now();
     let entrypoints = tt
         .run_once(async move { Ok(project.entrypoints().await?) })
         .await?;
-    println!("project.entrypoints {:?}", start.elapsed());
+    println!("project.entrypoints {:?} ({} GB)", start.elapsed(), mem());
 
     // TODO run 10 in parallel
     // select 100 by pseudo random
@@ -103,7 +103,7 @@ async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
             })
         })
         .await?;
-        println!(" {:?}", start.elapsed());
+        println!(" {:?} ({} GB)", start.elapsed(), mem());
     }
 
     let session = TransientInstance::new(());
@@ -138,18 +138,19 @@ async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
             break;
         }
     }
-    println!("HMR {:?}", start.elapsed());
+    println!("HMR {:?} ({} GB)", start.elapsed(), mem());
 
-    println!(
-        "Done ({}GB)",
-        (TurboMalloc::memory_usage() / 1024 / 1024) as f32 / 1024.0
-    );
+    println!("Done ({}GB)", mem());
 
     loop {
         sleep(Duration::from_secs(1000));
     }
 
     Ok(())
+}
+
+fn mem() -> f32 {
+    (TurboMalloc::memory_usage() / 1024 / 1024) as f32 / 1024.0
 }
 
 fn register() {
