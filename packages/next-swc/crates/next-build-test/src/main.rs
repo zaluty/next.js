@@ -63,15 +63,16 @@ async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
 
     // TODO run 10 in parallel
     // select 100 by pseudo random
-    let selected_routes = [
-        "/app-future/[lang]/home/[experiments]",
-        "/api/feature-flags",
-        "/api/show-consent-banner",
-        "/api/jwt",
-        "/api/exp",
-    ];
+    // let selected_routes = [
+    //     "/app-future/[lang]/home/[experiments]",
+    //     "/api/feature-flags",
+    //     "/api/show-consent-banner",
+    //     "/api/jwt",
+    //     "/api/exp",
+    // ];
+    let selected_routes = entrypoints.routes.keys().cloned().collect::<Vec<_>>();
     for name in selected_routes {
-        let route = entrypoints.routes.get(name).unwrap().clone();
+        let route = entrypoints.routes.get(&name).unwrap().clone();
         print!("{name}");
         stdout().flush().unwrap();
         let start = Instant::now();
