@@ -29,7 +29,7 @@ fn main() {
         .build()
         .unwrap()
         .block_on(async {
-            let tt = TurboTasks::new(MemoryBackend::new(usize::MAX));
+            let tt = TurboTasks::new(MemoryBackend::new(6 * 1024 * 1024 * 1024));
             let r = main_inner(&tt).await;
 
             let start = Instant::now();
@@ -105,6 +105,15 @@ async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
         })
         .await?;
         println!(" {:?} ({} GB)", start.elapsed(), mem());
+        loop {
+            let start = Instant::now();
+            if tt.backend().run_gc(false, &*tt) {
+                println!("GC {:?} ({} GB)...", start.elapsed(), mem());
+            } else {
+                println!("GC {:?} ({} GB) done", start.elapsed(), mem());
+                break;
+            }
+        }
     }
 
     let session = TransientInstance::new(());
