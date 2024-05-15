@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use tracing::Level;
 use turbo_tasks::{
     graph::{GraphTraversal, NonDeterministic},
-    macro_task, Value, Vc,
+    Value, Vc,
 };
 use turbopack_binding::{
     swc::core::ecma::{
@@ -181,8 +181,6 @@ async fn build_dynamic_imports_map_for_module(
     client_asset_context: Vc<Box<dyn AssetContext>>,
     server_module: Vc<Box<dyn Module>>,
 ) -> Result<Vc<OptionDynamicImportsMap>> {
-    macro_task();
-
     let Some(ecmascript_asset) =
         Vc::try_resolve_downcast_type::<EcmascriptModuleAsset>(server_module).await?
     else {
