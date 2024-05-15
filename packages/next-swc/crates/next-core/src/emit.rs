@@ -1,7 +1,7 @@
 use anyhow::Result;
 use turbo_tasks::{
     graph::{AdjacencyMap, GraphTraversal},
-    Completion, Completions, TryFlatJoinIterExt, Vc,
+    macro_task, Completion, Completions, Vc,
 };
 use turbo_tasks_fs::{rebase, FileSystemPath};
 use turbopack_binding::turbopack::core::{
@@ -46,35 +46,47 @@ pub async fn emit_assets(
             .await?
             .iter()
             .copied()
-            .map(|asset| async move {
-                if asset
-                    .ident()
-                    .path()
-                    .await?
-                    .is_inside_ref(&*node_root.await?)
-                {
-                    return Ok(Some(emit(asset)));
-                } else if asset
-                    .ident()
-                    .path()
-                    .await?
-                    .is_inside_ref(&*client_relative_path.await?)
-                {
-                    // Client assets are emitted to the client output path, which is prefixed with
-                    // _next. We need to rebase them to remove that prefix.
-                    return Ok(Some(emit_rebase(
-                        asset,
-                        client_relative_path,
-                        client_output_path,
-                    )));
-                }
-
-                Ok(None)
+            .map(|asset| {
+                emit_single_asset(
+                    asset,
+                    node_root.clone(),
+                    client_relative_path.clone(),
+                    client_output_path.clone(),
+                )
             })
-            .try_flat_join()
-            .await?,
+            .collect(),
     )
     .completed())
+}
+
+#[turbo_tasks::function]
+async fn emit_single_asset(
+    asset: Vc<Box<dyn OutputAsset>>,
+    node_root: Vc<FileSystemPath>,
+    client_relative_path: Vc<FileSystemPath>,
+    client_output_path: Vc<FileSystemPath>,
+) -> Result<Vc<Completion>> {
+    macro_task();
+
+    if asset
+        .ident()
+        .path()
+        .await?
+        .is_inside_ref(&*node_root.await?)
+    {
+        return Ok(emit(asset).await?);
+    } else if asset
+        .ident()
+        .path()
+        .await?
+        .is_inside_ref(&*client_relative_path.await?)
+    {
+        // Client assets are emitted to the client output path, which is prefixed with
+        // _next. We need to rebase them to remove that prefix.
+        return Ok(emit_rebase(asset, client_relative_path, client_output_path).await?);
+    }
+
+    Ok(Completion::unchanged())
 }
 
 /// Emits all assets transitively reachable from the given chunks, that are
@@ -93,44 +105,54 @@ pub async fn emit_client_assets(
             .await?
             .iter()
             .copied()
-            .map(|asset| async move {
-                if asset
-                    .ident()
-                    .path()
-                    .await?
-                    .is_inside_ref(&*client_relative_path.await?)
-                {
-                    // Client assets are emitted to the client output path, which is prefixed with
-                    // _next. We need to rebase them to remove that prefix.
-                    return Ok(Some(emit_rebase(
-                        asset,
-                        client_relative_path,
-                        client_output_path,
-                    )));
-                }
-
-                Ok(None)
-            })
-            .try_flat_join()
-            .await?,
+            .map(|asset| emit_single_client_asset(asset, client_relative_path, client_output_path))
+            .collect(),
     )
     .completed())
 }
 
+/// Emits a single client asset.
 #[turbo_tasks::function]
-fn emit(asset: Vc<Box<dyn OutputAsset>>) -> Vc<Completion> {
-    asset.content().write(asset.ident().path())
+async fn emit_single_client_asset(
+    asset: Vc<Box<dyn OutputAsset>>,
+    client_relative_path: Vc<FileSystemPath>,
+    client_output_path: Vc<FileSystemPath>,
+) -> Result<Vc<Completion>> {
+    macro_task();
+
+    if asset
+        .ident()
+        .path()
+        .await?
+        .is_inside_ref(&*client_relative_path.await?)
+    {
+        // Client assets are emitted to the client output path, which is prefixed with
+        // _next. We need to rebase them to remove that prefix.
+        return Ok(emit_rebase(asset, client_relative_path, client_output_path).await?);
+    }
+
+    Ok(Completion::unchanged())
 }
 
-#[turbo_tasks::function]
-fn emit_rebase(
+async fn emit(asset: Vc<Box<dyn OutputAsset>>) -> Result<Vc<Completion>> {
+    let content = asset.content();
+    let path = asset.ident().path();
+    let content = content.resolve().await?;
+    let path = path.resolve().await?;
+    Ok(content.write(path))
+}
+
+async fn emit_rebase(
     asset: Vc<Box<dyn OutputAsset>>,
     from: Vc<FileSystemPath>,
     to: Vc<FileSystemPath>,
-) -> Vc<Completion> {
-    asset
-        .content()
-        .write(rebase(asset.ident().path(), from, to))
+) -> Result<Vc<Completion>> {
+    let content = asset.content();
+    let path = asset.ident().path();
+    let content = content.resolve().await?;
+    let path = path.resolve().await?;
+    let path = rebase(path, from, to).resolve().await?;
+    Ok(content.write(path))
 }
 
 /// Walks the asset graph from multiple assets and collect all referenced
