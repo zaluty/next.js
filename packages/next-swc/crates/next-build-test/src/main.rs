@@ -3,6 +3,7 @@
 #![feature(arbitrary_self_types)]
 
 use std::{
+    env::current_dir,
     io::{stdout, Write},
     thread::sleep,
     time::{Duration, Instant},
@@ -13,9 +14,16 @@ use next_api::{
     project::{ProjectContainer, ProjectOptions},
     route::{Endpoint, Route},
 };
-use turbo_tasks::{TransientInstance, TurboTasks, TurboTasksApi, Vc};
+use next_core::tracing_presets::TRACING_NEXT_TURBO_TASKS_TARGETS;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
+use turbo_tasks::{TransientInstance, TurboTasks, Vc};
 use turbo_tasks_malloc::TurboMalloc;
-use turbopack_binding::turbo::tasks_memory::MemoryBackend;
+use turbopack_binding::{
+    turbo::tasks_memory::MemoryBackend,
+    turbopack::trace_utils::{
+        exit::ExitGuard, raw_trace::RawTraceLayer, trace_writer::TraceWriter,
+    },
+};
 
 #[global_allocator]
 static ALLOC: turbo_tasks_malloc::TurboMalloc = turbo_tasks_malloc::TurboMalloc;
@@ -29,6 +37,32 @@ fn main() {
         .build()
         .unwrap()
         .block_on(async {
+            const TRACING: bool = false;
+
+            let _guard = if TRACING {
+                let subscriber = Registry::default();
+
+                let subscriber = subscriber.with(
+                    EnvFilter::builder()
+                        .parse(TRACING_NEXT_TURBO_TASKS_TARGETS.join(","))
+                        .unwrap(),
+                );
+
+                let trace_file = current_dir().unwrap().join("trace.log");
+                println!("Writing trace to {:?}", trace_file);
+                let trace_writer = std::fs::File::create(trace_file).unwrap();
+                let (trace_writer, guard) = TraceWriter::new(trace_writer);
+                let subscriber = subscriber.with(RawTraceLayer::new(trace_writer));
+
+                let guard = ExitGuard::new(guard).unwrap();
+
+                subscriber.init();
+
+                Some(guard)
+            } else {
+                None
+            };
+
             let tt = TurboTasks::new(MemoryBackend::new(6 * 1024 * 1024 * 1024));
             let r = main_inner(&tt).await;
 

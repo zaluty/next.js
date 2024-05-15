@@ -3015,6 +3015,8 @@ dependencies = [
  "next-core",
  "serde_json",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "turbo-tasks",
  "turbo-tasks-malloc",
  "turbopack-binding",

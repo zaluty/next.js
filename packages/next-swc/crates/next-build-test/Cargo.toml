@@ -34,9 +34,12 @@ turbopack-binding = { workspace = true, features = [
   "__turbopack_ecmascript",
   "__turbopack_ecmascript_runtime",
   "__turbopack_env",
+  "__turbopack_trace_utils",
   "__turbopack_node",
 ] }
 turbo-tasks = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 # Enable specific tls features per-target.
 [target.'cfg(all(target_os = "windows", target_arch = "aarch64"))'.dependencies]
