@@ -29,6 +29,7 @@ use turbopack_binding::{
 static ALLOC: turbo_tasks_malloc::TurboMalloc = turbo_tasks_malloc::TurboMalloc;
 
 fn main() {
+    let tracing = std::env::var("TRACING").is_ok();
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .on_thread_stop(|| {
@@ -37,9 +38,7 @@ fn main() {
         .build()
         .unwrap()
         .block_on(async {
-            const TRACING: bool = false;
-
-            let _guard = if TRACING {
+            let _guard = if tracing {
                 let subscriber = Registry::default();
 
                 let subscriber = subscriber.with(
@@ -63,7 +62,7 @@ fn main() {
                 None
             };
 
-            let tt = TurboTasks::new(MemoryBackend::new(6 * 1024 * 1024 * 1024));
+            let tt = TurboTasks::new(MemoryBackend::new(16 * 1024 * 1024 * 1024));
             let r = main_inner(&tt).await;
 
             let start = Instant::now();
@@ -78,10 +77,15 @@ fn main() {
 async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
     register();
 
+    let simulate_dev = std::env::var("SIMULATE_DEV").is_ok();
+
     let mut file = std::fs::File::open("project_options.json")?;
     let data: ProjectOptions = serde_json::from_reader(&mut file).unwrap();
 
-    let options = ProjectOptions { ..data };
+    let mut options = ProjectOptions { ..data };
+
+    options.dev = simulate_dev;
+    options.watch = simulate_dev;
 
     let start = Instant::now();
     let project = tt
@@ -95,20 +99,35 @@ async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
         .await?;
     println!("project.entrypoints {:?} ({} GB)", start.elapsed(), mem());
 
-    // TODO run 10 in parallel
-    // select 100 by pseudo random
-    // let selected_routes = [
-    //     "/app-future/[lang]/home/[experiments]",
-    //     "/api/feature-flags",
-    //     "/api/show-consent-banner",
-    //     "/api/jwt",
-    //     "/api/exp",
-    // ];
-    let selected_routes = entrypoints.routes.keys().cloned().collect::<Vec<_>>();
+    // println!(
+    //     "{:#?}",
+    //     entrypoints.routes.keys().cloned().collect::<Vec<_>>()
+    // );
+
+    let selected_routes = if simulate_dev {
+        [
+            "/app-future/[lang]/home",
+            "/api/feature-flags",
+            "/api/show-consent-banner",
+            "/api/jwt",
+            "/api/exp",
+            // Navigations
+            "/app-future/[lang]/[teamSlug]/[project]",
+            "/app-future/[lang]/[teamSlug]/[project]/settings",
+            "/app-future/[lang]/[teamSlug]/[project]/settings/general",
+            "/app-future/[lang]/[teamSlug]/[project]/settings/git",
+            "/app-future/[lang]/[teamSlug]/[project]/settings/environment-variables",
+        ]
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+    } else {
+        entrypoints.routes.keys().cloned().collect::<Vec<_>>()
+    };
     for name in selected_routes {
-        let route = entrypoints.routes.get(&name).unwrap().clone();
         print!("{name}");
         stdout().flush().unwrap();
+        let route = entrypoints.routes.get(&name).unwrap().clone();
         let start = Instant::now();
         tt.run_once(async move {
             Ok(match route {
@@ -139,14 +158,9 @@ async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
         })
         .await?;
         println!(" {:?} ({} GB)", start.elapsed(), mem());
-        loop {
-            let start = Instant::now();
-            if tt.backend().run_gc(false, &*tt) {
-                println!("GC {:?} ({} GB)...", start.elapsed(), mem());
-            } else {
-                println!("GC {:?} ({} GB) done", start.elapsed(), mem());
-                break;
-            }
+        let start = Instant::now();
+        if tt.backend().run_gc(false, &*tt) {
+            println!("GC {:?} ({} GB)", start.elapsed(), mem());
         }
     }
 
@@ -186,8 +200,10 @@ async fn main_inner(tt: &TurboTasks<MemoryBackend>) -> Result<()> {
 
     println!("Done ({}GB)", mem());
 
-    loop {
-        sleep(Duration::from_secs(1000));
+    if simulate_dev {
+        loop {
+            sleep(Duration::from_secs(1000));
+        }
     }
 
     Ok(())
