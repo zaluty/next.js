@@ -62,7 +62,7 @@ fn main() {
                 None
             };
 
-            let tt = TurboTasks::new(MemoryBackend::new(16 * 1024 * 1024 * 1024));
+            let tt = TurboTasks::new(MemoryBackend::new(7 * 1024 * 1024 * 1024));
             let r = main_inner(&tt).await;
 
             let start = Instant::now();
