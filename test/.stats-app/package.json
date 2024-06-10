@@ -3,9 +3,9 @@
   "private": true,
   "license": "MIT",
   "dependencies": {
-    "next": "19.0.0-rc-1df34bdf62-20240605",
-    "react": "19.0.0-rc-1df34bdf62-20240605",
-    "react-dom": "19.0.0-rc-1df34bdf62-20240605"
+    "next": "19.0.0-rc-20b6f4c0e8-20240607",
+    "react": "19.0.0-rc-20b6f4c0e8-20240607",
+    "react-dom": "19.0.0-rc-20b6f4c0e8-20240607"
   },
   "engines": {
     "node": ">=18.17.0",

@@ -11676,7 +11676,7 @@ var ownerHasKeyUseWarning;
 var ownerHasFunctionTypeWarning;
 var ownerHasSymbolTypeWarning;
 
-var warnForMissingKey = function (child, returnFiber) {};
+var warnForMissingKey = function (returnFiber, workInProgress, child) {};
 
 {
   didWarnAboutMaps = false;
@@ -11691,7 +11691,7 @@ var warnForMissingKey = function (child, returnFiber) {};
   ownerHasFunctionTypeWarning = {};
   ownerHasSymbolTypeWarning = {};
 
-  warnForMissingKey = function (child, returnFiber) {
+  warnForMissingKey = function (returnFiber, workInProgress, child) {
     if (child === null || typeof child !== 'object') {
       return;
     }
@@ -11750,15 +11750,9 @@ var warnForMissingKey = function (child, returnFiber) {};
         // Give the component that originally created this child.
         childOwnerAppendix = " It was passed a child from " + ownerName + ".";
       }
-    } // We create a fake Fiber for the child to log the stack trace from.
-    // TODO: Refactor the warnForMissingKey calls to happen after fiber creation
-    // so that we can get access to the fiber that will eventually be created.
-    // That way the log can show up associated with the right instance in DevTools.
+    }
 
-
-    var fiber = createFiberFromElement(child, returnFiber.mode, 0);
-    fiber.return = returnFiber;
-    runWithFiberInDEV(fiber, function () {
+    runWithFiberInDEV(workInProgress, function () {
       error('Each child in a list should have a unique "key" prop.' + '%s%s See https://react.dev/link/warning-keys for more information.', currentComponentErrorInfo, childOwnerAppendix);
     });
   };
@@ -12355,7 +12349,7 @@ function createChildReconciler(shouldTrackSideEffects) {
    */
 
 
-  function warnOnInvalidKey(child, knownKeys, returnFiber) {
+  function warnOnInvalidKey(returnFiber, workInProgress, child, knownKeys) {
     {
       if (typeof child !== 'object' || child === null) {
         return knownKeys;
@@ -12364,7 +12358,7 @@ function createChildReconciler(shouldTrackSideEffects) {
       switch (child.$$typeof) {
         case REACT_ELEMENT_TYPE:
         case REACT_PORTAL_TYPE:
-          warnForMissingKey(child, returnFiber);
+          warnForMissingKey(returnFiber, workInProgress, child);
           var key = child.key;
 
           if (typeof key !== 'string') {
@@ -12382,8 +12376,9 @@ function createChildReconciler(shouldTrackSideEffects) {
             break;
           }
 
-          error('Encountered two children with the same key, `%s`. ' + 'Keys should be unique so that components maintain their identity ' + 'across updates. Non-unique keys may cause children to be ' + 'duplicated and/or omitted — the behavior is unsupported and ' + 'could change in a future version.', key);
-
+          runWithFiberInDEV(workInProgress, function () {
+            error('Encountered two children with the same key, `%s`. ' + 'Keys should be unique so that components maintain their identity ' + 'across updates. Non-unique keys may cause children to be ' + 'duplicated and/or omitted — the behavior is unsupported and ' + 'could change in a future version.', key);
+          });
           break;
 
         case REACT_LAZY_TYPE:
@@ -12394,7 +12389,7 @@ function createChildReconciler(shouldTrackSideEffects) {
               resolvedChild = callLazyInitInDEV(child);
             }
 
-            warnOnInvalidKey(resolvedChild, knownKeys, returnFiber);
+            warnOnInvalidKey(returnFiber, workInProgress, resolvedChild, knownKeys);
             break;
           }
       }
@@ -12419,16 +12414,7 @@ function createChildReconciler(shouldTrackSideEffects) {
     // (adding everything to a Map) in for every insert/move.
     // If you change this code, also update reconcileChildrenIterator() which
     // uses the same algorithm.
-    {
-      // First, validate keys.
-      var knownKeys = null;
-
-      for (var i = 0; i < newChildren.length; i++) {
-        var child = newChildren[i];
-        knownKeys = warnOnInvalidKey(child, knownKeys, returnFiber);
-      }
-    }
-
+    var knownKeys = null;
     var resultingFirstChild = null;
     var previousNewFiber = null;
     var oldFiber = currentFirstChild;
@@ -12456,6 +12442,10 @@ function createChildReconciler(shouldTrackSideEffects) {
         }
 
         break;
+      }
+
+      {
+        knownKeys = warnOnInvalidKey(returnFiber, newFiber, newChildren[newIdx], knownKeys);
       }
 
       if (shouldTrackSideEffects) {
@@ -12505,6 +12495,10 @@ function createChildReconciler(shouldTrackSideEffects) {
           continue;
         }
 
+        {
+          knownKeys = warnOnInvalidKey(returnFiber, _newFiber, newChildren[newIdx], knownKeys);
+        }
+
         lastPlacedIndex = placeChild(_newFiber, lastPlacedIndex, newIdx);
 
         if (previousNewFiber === null) {
@@ -12532,6 +12526,10 @@ function createChildReconciler(shouldTrackSideEffects) {
       var _newFiber2 = updateFromMap(existingChildren, returnFiber, newIdx, newChildren[newIdx], lanes, debugInfo);
 
       if (_newFiber2 !== null) {
+        {
+          knownKeys = warnOnInvalidKey(returnFiber, _newFiber2, newChildren[newIdx], knownKeys);
+        }
+
         if (shouldTrackSideEffects) {
           if (_newFiber2.alternate !== null) {
             // The new fiber is a work in progress, but if there exists a
@@ -12663,11 +12661,7 @@ function createChildReconciler(shouldTrackSideEffects) {
     var knownKeys = null;
     var step = newChildren.next();
 
-    {
-      knownKeys = warnOnInvalidKey(step.value, knownKeys, returnFiber);
-    }
-
-    for (; oldFiber !== null && !step.done; newIdx++, step = newChildren.next(), knownKeys = warnOnInvalidKey(step.value, knownKeys, returnFiber) ) {
+    for (; oldFiber !== null && !step.done; newIdx++, step = newChildren.next()) {
       if (oldFiber.index > newIdx) {
         nextOldFiber = oldFiber;
         oldFiber = null;
@@ -12687,6 +12681,10 @@ function createChildReconciler(shouldTrackSideEffects) {
         }
 
         break;
+      }
+
+      {
+        knownKeys = warnOnInvalidKey(returnFiber, newFiber, step.value, knownKeys);
       }
 
       if (shouldTrackSideEffects) {
@@ -12729,11 +12727,15 @@ function createChildReconciler(shouldTrackSideEffects) {
     if (oldFiber === null) {
       // If we don't have any more existing children we can choose a fast path
       // since the rest will all be insertions.
-      for (; !step.done; newIdx++, step = newChildren.next(), knownKeys = warnOnInvalidKey(step.value, knownKeys, returnFiber) ) {
+      for (; !step.done; newIdx++, step = newChildren.next()) {
         var _newFiber3 = createChild(returnFiber, step.value, lanes, debugInfo);
 
         if (_newFiber3 === null) {
           continue;
+        }
+
+        {
+          knownKeys = warnOnInvalidKey(returnFiber, _newFiber3, step.value, knownKeys);
         }
 
         lastPlacedIndex = placeChild(_newFiber3, lastPlacedIndex, newIdx);
@@ -12759,10 +12761,14 @@ function createChildReconciler(shouldTrackSideEffects) {
 
     var existingChildren = mapRemainingChildren(oldFiber); // Keep scanning and use the map to restore deleted items as moves.
 
-    for (; !step.done; newIdx++, step = newChildren.next(), knownKeys = warnOnInvalidKey(step.value, knownKeys, returnFiber) ) {
+    for (; !step.done; newIdx++, step = newChildren.next()) {
       var _newFiber4 = updateFromMap(existingChildren, returnFiber, newIdx, step.value, lanes, debugInfo);
 
       if (_newFiber4 !== null) {
+        {
+          knownKeys = warnOnInvalidKey(returnFiber, _newFiber4, step.value, knownKeys);
+        }
+
         if (shouldTrackSideEffects) {
           if (_newFiber4.alternate !== null) {
             // The new fiber is a work in progress, but if there exists a
@@ -36549,8 +36555,25 @@ function getResource(type, currentProps, pendingProps, currentResource) {
 
             _styles.set(_key, _resource);
 
+            var instance = ownerDocument.querySelector(getStylesheetSelectorFromKey(_key));
+
+            if (instance) {
+              var loadingState = instance._p;
+
+              if (loadingState) ; else {
+                // This instance is already loaded
+                _resource.instance = instance;
+                _resource.state.loading = Loaded | Inserted;
+              }
+            }
+
             if (!preloadPropsMap.has(_key)) {
-              preloadStylesheet(ownerDocument, _key, preloadPropsFromStylesheet(qualifiedProps), _resource.state);
+              var preloadProps = preloadPropsFromStylesheet(qualifiedProps);
+              preloadPropsMap.set(_key, preloadProps);
+
+              if (!instance) {
+                preloadStylesheet(ownerDocument, _key, preloadProps, _resource.state);
+              }
             }
           }
 
@@ -36697,31 +36720,24 @@ function stylesheetPropsFromRawProps(rawProps) {
 }
 
 function preloadStylesheet(ownerDocument, key, preloadProps, state) {
-  preloadPropsMap.set(key, preloadProps);
+  var preloadEl = ownerDocument.querySelector(getPreloadStylesheetSelectorFromKey(key));
 
-  if (!ownerDocument.querySelector(getStylesheetSelectorFromKey(key))) {
-    // There is no matching stylesheet instance in the Document.
-    // We will insert a preload now to kick off loading because
-    // we expect this stylesheet to commit
-    var preloadEl = ownerDocument.querySelector(getPreloadStylesheetSelectorFromKey(key));
-
-    if (preloadEl) {
-      // If we find a preload already it was SSR'd and we won't have an actual
-      // loading state to track. For now we will just assume it is loaded
-      state.loading = Loaded;
-    } else {
-      var instance = ownerDocument.createElement('link');
-      state.preload = instance;
-      instance.addEventListener('load', function () {
-        return state.loading |= Loaded;
-      });
-      instance.addEventListener('error', function () {
-        return state.loading |= Errored;
-      });
-      setInitialProperties(instance, 'link', preloadProps);
-      markNodeAsHoistable(instance);
-      ownerDocument.head.appendChild(instance);
-    }
+  if (preloadEl) {
+    // If we find a preload already it was SSR'd and we won't have an actual
+    // loading state to track. For now we will just assume it is loaded
+    state.loading = Loaded;
+  } else {
+    var instance = ownerDocument.createElement('link');
+    state.preload = instance;
+    instance.addEventListener('load', function () {
+      return state.loading |= Loaded;
+    });
+    instance.addEventListener('error', function () {
+      return state.loading |= Errored;
+    });
+    setInitialProperties(instance, 'link', preloadProps);
+    markNodeAsHoistable(instance);
+    ownerDocument.head.appendChild(instance);
   }
 }
 
@@ -37589,7 +37605,7 @@ identifierPrefix, onUncaughtError, onCaughtError, onRecoverableError, transition
   return root;
 }
 
-var ReactVersion = '19.0.0-experimental-1df34bdf62-20240605';
+var ReactVersion = '19.0.0-experimental-20b6f4c0e8-20240607';
 
 // Might add PROFILE later.
 
